@@ -5,6 +5,7 @@ import 'package:driver/app/dash_board_screen/dash_board_screen.dart';
 import 'package:driver/constant/constant.dart';
 import 'package:driver/constant/show_toast_dialog.dart';
 import 'package:driver/models/user_model.dart';
+import 'package:driver/services/play_integrity_service.dart';
 import 'package:driver/utils/fire_store_utils.dart';
 import 'package:driver/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
 
 class LoginController extends GetxController {
   Rx<TextEditingController> emailEditingController =
@@ -68,61 +70,83 @@ class LoginController extends GetxController {
 
   loginWithGoogle() async {
     ShowToastDialog.showLoader("please wait...".tr);
-    await signInWithGoogle().then((value) async {
-      ShowToastDialog.closeLoader();
-      if (value != null) {
-        if (value.additionalUserInfo!.isNewUser) {
-          UserModel userModel = UserModel();
-          userModel.id = value.user!.uid;
-          userModel.email = value.user!.email;
-          userModel.firstName = value.user!.displayName?.split(' ').first;
-          userModel.lastName = value.user!.displayName?.split(' ').last;
-          userModel.provider = 'google';
+    
+    try {
+      // Get Play Integrity token
+      final token = await PlayIntegrityService.getIntegrityToken();
+      
+      if (token == null) {
+        ShowToastDialog.closeLoader();
+        ShowToastDialog.showToast("Integrity check failed".tr);
+        return;
+      }
+      
+      // Verify integrity with backend
+      final isVerified = await PlayIntegrityService.verifyIntegrity(token);
+      if (!isVerified) {
+        ShowToastDialog.closeLoader();
+        ShowToastDialog.showToast("Security verification failed".tr);
+        return;
+      }
 
-          ShowToastDialog.closeLoader();
-          Get.off(const SignupScreen(), arguments: {
-            "userModel": userModel,
-            "type": "google",
-          });
-        } else {
-          await FireStoreUtils.userExistOrNot(value.user!.uid)
-              .then((userExit) async {
+      await signInWithGoogle().then((value) async {
+        ShowToastDialog.closeLoader();
+        if (value != null) {
+          if (value.additionalUserInfo!.isNewUser) {
+            UserModel userModel = UserModel();
+            userModel.id = value.user!.uid;
+            userModel.email = value.user!.email;
+            userModel.firstName = value.user!.displayName?.split(' ').first;
+            userModel.lastName = value.user!.displayName?.split(' ').last;
+            userModel.provider = 'google';
+
             ShowToastDialog.closeLoader();
-            if (userExit == true) {
-              UserModel? userModel =
-                  await FireStoreUtils.getUserProfile(value.user!.uid);
-              if (userModel!.role == Constant.userRoleVendor) {
-                if (userModel.active == true) {
-                  userModel.fcmToken = await NotificationService.getToken();
-                  await FireStoreUtils.updateUser(userModel);
-                  Get.offAll(const DashBoardScreen());
+            Get.off(const SignupScreen(), arguments: {
+              "userModel": userModel,
+              "type": "google",
+            });
+          } else {
+            await FireStoreUtils.userExistOrNot(value.user!.uid)
+                .then((userExit) async {
+              ShowToastDialog.closeLoader();
+              if (userExit == true) {
+                UserModel? userModel =
+                    await FireStoreUtils.getUserProfile(value.user!.uid);
+                if (userModel!.role == Constant.userRoleVendor) {
+                  if (userModel.active == true) {
+                    userModel.fcmToken = await NotificationService.getToken();
+                    await FireStoreUtils.updateUser(userModel);
+                    Get.offAll(const DashBoardScreen());
+                  } else {
+                    await FirebaseAuth.instance.signOut();
+                    ShowToastDialog.showToast(
+                        "This user is disable please contact to administrator"
+                            .tr);
+                  }
                 } else {
                   await FirebaseAuth.instance.signOut();
-                  ShowToastDialog.showToast(
-                      "This user is disable please contact to administrator"
-                          .tr);
+                  // ShowToastDialog.showToast("This user is disable please contact to administrator".tr);
                 }
               } else {
-                await FirebaseAuth.instance.signOut();
-                // ShowToastDialog.showToast("This user is disable please contact to administrator".tr);
-              }
-            } else {
-              UserModel userModel = UserModel();
-              userModel.id = value.user!.uid;
-              userModel.email = value.user!.email;
-              userModel.firstName = value.user!.displayName?.split(' ').first;
-              userModel.lastName = value.user!.displayName?.split(' ').last;
-              userModel.provider = 'google';
+                UserModel userModel = UserModel();
+                userModel.id = value.user!.uid;
+                userModel.email = value.user!.email;
+                userModel.firstName = value.user!.displayName?.split(' ').first;
+                userModel.lastName = value.user!.displayName?.split(' ').last;
+                userModel.provider = 'google';
 
-              Get.off(const SignupScreen(), arguments: {
-                "userModel": userModel,
-                "type": "google",
-              });
-            }
-          });
+                Get.off(const SignupScreen(), arguments: {
+                  "userModel": userModel,
+                  "type": "google",
+                });
+              }
+            });
+          }
         }
-      }
-    });
+      });
+    } catch (e) {
+      debugPrint(e.toString());
+    }
   }
 
   loginWithApple() async {

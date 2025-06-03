@@ -36,6 +36,7 @@ class Constant {
 
   static UserModel? userModel;
   static const globalUrl = "https://foodie.siswebapp.com/";
+  static const apiUrl = "https://foodie.siswebapp.com";
 
   static bool singleOrderReceive = false;
   static String driverLocationUpdate = '50';

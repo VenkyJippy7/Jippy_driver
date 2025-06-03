@@ -61,7 +61,7 @@ class LoginScreen extends StatelessWidget {
                     TextSpan(
                       children: [
                         TextSpan(
-                            text: "Didn’t Have an account?".tr,
+                            text: "Didn't Have an account?".tr,
                             style: TextStyle(
                               color: themeChange.getThem()
                                   ? AppThemeData.grey50
@@ -204,6 +204,7 @@ class LoginScreen extends StatelessWidget {
                         onPress: () async {
                           Get.to(const PhoneNumberScreen());
                         },
+                        visible: false,
                       ),
                       const SizedBox(
                         height: 12,
